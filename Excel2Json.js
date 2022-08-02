@@ -96,6 +96,7 @@ var g_localConfig = g_scriptFolder + "Excel2Json.config.js";
 // Default Configuration
 // DO NOT CHANGE THIS VALUE, MAKE Excel2Json.config.js FILE AND COPY THESE LINES AND EDIT THEM!!
 var g_sourceFolder = g_scriptFolder;
+var g_sourceSheet = "";
 var g_targetFolder = "output"; // subdirectory in g_sourceFolder
 var g_tempSuffix = ".$$$";
 var g_prettyOutput = true; // false for compact
@@ -466,6 +467,8 @@ String.prototype.endsWith = function(suffix) {
 
 function setScanningFile( csvFile )
 {
+	log( "setScanningFile : " + csvFile );
+
 	csvFile = csvFile.replace( g_sourceFolder, "" );
 	var sheetName = csvFile;
 	var idx = csvFile.indexOf( g_tempSuffix );
@@ -903,7 +906,7 @@ function compileSheetArray( sheetArray )
 	return rootObject;
 }
 
-function parseExcel( excelFile )
+function parseExcel( excelFile, sheetName )
 {
 	E.Workbooks.Open( excelFile, true, true );
 	
@@ -922,10 +925,13 @@ function parseExcel( excelFile )
 				log( "Skipped, '!' prefix detected" );
 				continue;
 			}
-			var csvFile = saveAsCSV( sheet, tmpdir );
-			setScanningFile( csvFile );
-			csvFiles.push( csvFile );
-			sheetArray.push( readCSVFile( csvFile, sheetArray ) );
+
+			if (!sheetName || sheet.Name == sheetName) {
+				var csvFile = saveAsCSV( sheet, tmpdir );
+				setScanningFile( csvFile );
+				csvFiles.push( csvFile );
+				sheetArray.push( readCSVFile( csvFile, sheetArray ) );
+			}
 		}
 	} catch(e) {
 		popup( "Error: " + e.message );
@@ -935,8 +941,13 @@ function parseExcel( excelFile )
 	E.Workbooks.Close();
 	deleteTemp( tmpdir );
 	log( "Closing: " + excelFile );
-	var rootObject = compileSheetArray( sheetArray );
-	return JSON.stringify( rootObject ).split("\n").join("\r\n");
+
+	var rootObject = compileSheetArray(sheetArray);
+	if (sheetName) {
+		rootObject = rootObject.tableData;
+	}
+
+	return JSON.stringify(rootObject).split("\n").join("\r\n");
 }
 
 try {
@@ -954,6 +965,9 @@ try {
 		if( !isExcel( objArgs( objArgs.length - 1) ) ) {
 			g_targetFolder = objArgs( objArgs.length - 1);
 		}
+		if( objArgs.length > 1 && !isExcel( objArgs( objArgs.length - 2) ) ) {
+			g_sourceSheet = objArgs( objArgs.length - 2);
+		}
 	} else {
 		excels = getExcelFiles(g_sourceFolder);
 	}
@@ -965,8 +979,14 @@ try {
 	g_targetFolder = assertTraillingOneSlash( g_targetFolder );
 	for( var i in excels )
 	{
-		var jsonString = parseExcel(excels[i]);
-		saveJson( excels[i], jsonString );
+		var jsonString = parseExcel(excels[i], g_sourceSheet);
+		if ( !g_sourceSheet ) {
+			saveJson( excels[i], jsonString );
+		}
+		else {
+			saveJson( g_sourceSheet, jsonString );
+			break;
+		}
 	}
 	deleteTempFiles( g_sourceFolder );
 
